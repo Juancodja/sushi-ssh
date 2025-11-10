@@ -52,7 +52,6 @@ func main() {
 
 	msg, _ = bufio.NewReader(conn).ReadString('\n')
 
-	skinit = kex.Un
 	fmt.Println("SERVIDOR:", msg)
 
 }
