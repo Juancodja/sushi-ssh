@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 
 	"github.com/Juancodja/sushi-ssh/kex"
@@ -32,7 +34,7 @@ func main() {
 	ckinit := kex.KexInit{
 		MessageCode:                20,
 		Cookie:                     c,
-		KexAlgos:                   utils.NameList{"diffie-hellman-group1-sha1", "diffie-hellman-group14-sha1"},
+		KexAlgos:                   utils.NameList{"diffie-hellman-group1-sha1", "diffie-hellman-group14-sha1", "curve25519-sha256"},
 		ServerHostKeyAlgos:         utils.NameList{"ssh-rsa", "ssh-dss"},
 		EncryptionClientToServer:   utils.NameList{"3des-cbc"},
 		EncryptionServerToClient:   utils.NameList{"3des-cbc"},
@@ -54,8 +56,35 @@ func main() {
 
 	fmt.Fprint(conn, m)
 
-	msg, _ = bufio.NewReader(conn).ReadString('\n')
+	var packlen uint32
+	binary.Read(conn, binary.BigEndian, &packlen)
 
-	fmt.Println("SERVIDOR:", msg)
+	var padlen byte
+	binary.Read(conn, binary.BigEndian, &padlen)
 
+	payload_len := int(packlen) - int(padlen) - 1
+	payload := make([]byte, payload_len)
+	_, err = io.ReadFull(conn, payload)
+	if err != nil {
+		panic(err)
+	}
+
+	skinit, _ := kex.UnmarshalKexInit(payload)
+
+	fmt.Printf("%+v\n", skinit)
+
+	kexAlg := "none"
+	for _, v1 := range ckinit.KexAlgos {
+		for _, v2 := range skinit.KexAlgos {
+			if v2 == v1 {
+				kexAlg = v2
+				break
+			}
+		}
+	}
+	if kexAlg == "none" {
+		panic("no hay algorimo valido")
+	}
+	fmt.Println("ALGORITMO KEX SELECIONADO: ")
+	fmt.Println(kexAlg)
 }
