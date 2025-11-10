@@ -50,6 +50,10 @@ func main() {
 
 	fmt.Printf("%+v\n", ckinit)
 
+	m := utils.NewSSHMessage(ckinit.Marshal(), []byte{}, 8)
+
+	fmt.Fprint(conn, m)
+
 	msg, _ = bufio.NewReader(conn).ReadString('\n')
 
 	fmt.Println("SERVIDOR:", msg)
