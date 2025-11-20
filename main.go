@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/Juancodja/sushi-ssh/kex"
 	"github.com/Juancodja/sushi-ssh/utils"
@@ -88,6 +89,7 @@ func main() {
 	skinit, _ := kex.UnmarshalKexInit(payload)
 
 	fmt.Println("SERVIDOR: SSH_MSH_KEXINIT ")
+	//utils.PrettyPrint(serverKexInitMsg)
 	//utils.PrettyPrint(skinit)
 
 	algs := kex.ResoleveAlgos(ckinit, skinit)
@@ -109,16 +111,16 @@ func main() {
 
 	fmt.Println("CLIENT: SSH_MSG_KEX_ECDH_INIT")
 	kexMsg := utils.NewSSHMessage(kexPayload, []byte{}, 8)
-	utils.PrettyPrint(kexMsg)
-
-	err = utils.SendMessage(conn, kexMsg.Marshal())
-	if err != nil {
-		panic(err)
-	}
+	//utils.PrettyPrint(kexMsg)
+	time.Sleep(500 * time.Millisecond)
 	serverKexMsg, err := utils.ReadNextMessage(conn, 0)
 	if err != nil {
 		panic(err)
 	}
 	payload = serverKexMsg.Payload
-
+	//utils.PrettyPrint(serverKexMsg)
+	err = utils.SendMessage(conn, kexMsg.Marshal())
+	if err != nil {
+		panic(err)
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -66,6 +67,7 @@ func SendMessage(conn net.Conn, data []byte) error {
 }
 
 func ReadNextMessage(conn io.Reader, maclen int) (*SSHMessage, error) {
+	totalBytes := 0
 	var packlen uint32
 	if err := binary.Read(conn, binary.BigEndian, &packlen); err != nil {
 		return nil, err
@@ -79,6 +81,7 @@ func ReadNextMessage(conn io.Reader, maclen int) (*SSHMessage, error) {
 	if err := binary.Read(conn, binary.BigEndian, &padlen); err != nil {
 		return nil, err
 	}
+	totalBytes += 1
 
 	payloadlen := int(packlen) - int(padlen) - 1
 	if payloadlen < 0 {
@@ -86,18 +89,30 @@ func ReadNextMessage(conn io.Reader, maclen int) (*SSHMessage, error) {
 	}
 
 	payload := make([]byte, payloadlen)
-	if _, err := io.ReadFull(conn, payload); err != nil {
+	n := 0
+	n, err := io.ReadFull(conn, payload)
+	if err != nil {
 		return nil, err
 	}
+	totalBytes += n
 
 	padding := make([]byte, padlen)
-	if _, err := io.ReadFull(conn, padding); err != nil {
+	n, err = io.ReadFull(conn, padding)
+	if err != nil {
 		return nil, err
 	}
+	totalBytes += n
 
 	mac := make([]byte, maclen)
-	if _, err := io.ReadFull(conn, mac); err != nil {
+	n, err = io.ReadFull(conn, mac)
+	if err != nil {
 		return nil, err
+	}
+	totalBytes += n
+
+	fmt.Printf("Leyendo Mensaje: pack: %d pay: %d pad: %d mac: %d leidos: %d \n", packlen, payloadlen, padlen, maclen, totalBytes)
+	if totalBytes != int(packlen) {
+		return nil, errors.New("Mensaje mal leido")
 	}
 
 	return &SSHMessage{
