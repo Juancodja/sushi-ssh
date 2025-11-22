@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/ecdh"
 	"crypto/rand"
 	"flag"
@@ -10,6 +12,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/Juancodja/sushi-ssh/kex"
 	"github.com/Juancodja/sushi-ssh/ssh"
@@ -80,7 +83,7 @@ func main() {
 		EmptyField:                 0,
 	}
 
-	m := ssh.NewSSHMessage(ckinit.Marshal(), []byte{}, 8)
+	m := ssh.NewSshMessage(ckinit.Marshal(), 8)
 
 	mBytes := m.Marshal()
 	err = ssh.SendMessage(conn, mBytes)
@@ -117,7 +120,7 @@ func main() {
 	)
 	kexPayload = append(kexPayload, Qc...)
 
-	kexMsg := ssh.NewSSHMessage(kexPayload, []byte{}, 8)
+	kexMsg := ssh.NewSshMessage(kexPayload, 8)
 	err = ssh.SendMessage(conn, kexMsg.Marshal())
 	if err != nil {
 		panic(err)
@@ -157,7 +160,7 @@ func main() {
 	}
 
 	fmt.Println("CLIENT: SSH_MSG_NEW_KEYS")
-	clientNewKeys := ssh.NewSSHMessage([]byte{21}, []byte{}, 8)
+	clientNewKeys := ssh.NewSshMessage([]byte{21}, 8)
 	err = ssh.SendMessage(conn, clientNewKeys.Marshal())
 	if err != nil {
 		panic(err)
@@ -168,4 +171,28 @@ func main() {
 		panic(err)
 	}
 	utils.PrettyPrint(ConnState)
+
+	block, err := aes.NewCipher(ConnState.KeyClientToServer)
+	if err != nil {
+		panic(err)
+	}
+
+	stream := cipher.NewCTR(block, ConnState.IVClientToServer)
+	ciphexCtx := &ssh.CipherContext{
+		conn,
+		stream,
+		ConnState.MACClientToServer,
+		3,
+	}
+
+	incoming := make(chan []byte, 20)
+	defer close(incoming)
+	var wg sync.WaitGroup
+	ssh.StartCipherWriter(&wg, ciphexCtx, incoming)
+
+	b = bytes.NewBuffer([]byte{})
+	b.Write([]byte{5})
+
+	incoming <- b.Bytes()
+	wg.Wait()
 }

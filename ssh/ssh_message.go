@@ -11,15 +11,14 @@ import (
 
 const MIN_PAD_LEN = 4
 
-type SSHMessage struct {
+type SshMessage struct {
 	PacketLength  uint32
 	PaddingLength byte
 	Payload       []byte
 	Padding       []byte
-	MAC           []byte
 }
 
-func (m *SSHMessage) Marshal() []byte {
+func (m *SshMessage) Marshal() []byte {
 	buf := &bytes.Buffer{}
 
 	binary.Write(buf, binary.BigEndian, m.PacketLength)
@@ -28,12 +27,11 @@ func (m *SSHMessage) Marshal() []byte {
 
 	buf.Write(m.Payload)
 	buf.Write(m.Padding)
-	buf.Write(m.MAC)
 
 	return buf.Bytes()
 }
 
-func NewSSHMessage(payload, mac []byte, blockSize int) *SSHMessage {
+func NewSshMessage(payload []byte, blockSize int) *SshMessage {
 	paylen := len(payload)
 	padlen := 4
 	packlen := paylen + padlen + 1
@@ -54,12 +52,11 @@ func NewSSHMessage(payload, mac []byte, blockSize int) *SSHMessage {
 		panic("Largo paquete incorrecto")
 	}
 
-	return &SSHMessage{
+	return &SshMessage{
 		uint32(packlen),
 		byte(padlen),
 		payload,
 		pad,
-		mac,
 	}
 }
 
@@ -74,7 +71,7 @@ func SendMessage(conn net.Conn, data []byte) error {
 	return nil
 }
 
-func ReadNextMessage(conn io.Reader, maclen int) (*SSHMessage, error) {
+func ReadNextMessage(conn io.Reader, maclen int) (*SshMessage, error) {
 	totalBytes := 0
 	var packlen uint32
 	if err := binary.Read(conn, binary.BigEndian, &packlen); err != nil {
@@ -122,11 +119,10 @@ func ReadNextMessage(conn io.Reader, maclen int) (*SSHMessage, error) {
 		return nil, errors.New("Mensaje mal leido")
 	}
 
-	return &SSHMessage{
+	return &SshMessage{
 		PacketLength:  packlen,
 		PaddingLength: padlen,
 		Payload:       payload,
 		Padding:       padding,
-		MAC:           mac,
 	}, nil
 }
