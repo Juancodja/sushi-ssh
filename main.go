@@ -44,13 +44,21 @@ func main() {
 	}
 	defer conn.Close()
 
+	kexState := kex.KexState{}
 	version := "SSH-2.0-SUSHI"
 	fmt.Println("CLIENTE: ", version)
 
 	fmt.Fprint(conn, version+"\r\n")
 
-	msg, _ := bufio.NewReader(conn).ReadString('\n')
-	fmt.Println("SERVIDOR:", msg)
+	serverVersion, _ := bufio.NewReader(conn).ReadString('\n')
+	serverVersion = strings.ReplaceAll(serverVersion, "\r\n", "")
+
+	fmt.Println("SERVIDOR:", serverVersion)
+
+	kexState.ClientVersion = []byte(version)
+	kexState.ServerVersion = []byte(serverVersion)
+
+	fmt.Println("CLIENTE: SSH_MSG_KEXINIT")
 
 	var c [16]byte
 	rand.Read(c[:])
@@ -72,8 +80,6 @@ func main() {
 		EmptyField:                 0,
 	}
 
-	fmt.Println("CLIENTE: SSH_MSG_KEXINIT")
-
 	m := ssh.NewSSHMessage(ckinit.Marshal(), []byte{}, 8)
 
 	mBytes := m.Marshal()
@@ -82,6 +88,7 @@ func main() {
 		panic(err)
 	}
 
+	fmt.Println("SERVIDOR: SSH_MSH_KEXINIT ")
 	serverKexInitMsg, err := ssh.ReadNextMessage(conn, 0)
 	if err != nil {
 		panic(err)
@@ -89,16 +96,18 @@ func main() {
 	payload := serverKexInitMsg.Payload
 	skinit, _ := kex.UnmarshalKexInit(payload)
 
-	fmt.Println("SERVIDOR: SSH_MSH_KEXINIT ")
+	kexState.ClientKexInit = ckinit.Marshal()
+	kexState.ServerKexInit = skinit.Marshal()
 
-	algs := kex.ResoleveAlgos(ckinit, skinit)
 	fmt.Println("ALGORITMO KEX SELECIONADOS: ")
+	algs := kex.ResoleveAlgos(ckinit, skinit)
 	utils.PrettyPrint(algs)
 
-	Q, err := ecdh.X25519().GenerateKey(rand.Reader)
-	Q_c := Q.PublicKey().Bytes()
+	fmt.Println("CLIENT: SSH_MSG_KEX_ECDH_INIT")
+	privECDH, err := ecdh.X25519().GenerateKey(rand.Reader)
+	Qc := privECDH.PublicKey().Bytes()
 
-	keylen := uint32(len(Q_c))
+	keylen := uint32(len(Qc))
 	kexPayload := []byte{30}
 	kexPayload = append(kexPayload,
 		byte(keylen>>24),
@@ -106,9 +115,8 @@ func main() {
 		byte(keylen>>8),
 		byte(keylen),
 	)
-	kexPayload = append(kexPayload, Q_c...)
+	kexPayload = append(kexPayload, Qc...)
 
-	fmt.Println("CLIENT: SSH_MSG_KEX_ECDH_INIT")
 	kexMsg := ssh.NewSSHMessage(kexPayload, []byte{}, 8)
 	err = ssh.SendMessage(conn, kexMsg.Marshal())
 	if err != nil {
@@ -123,11 +131,20 @@ func main() {
 
 	b := bytes.NewBuffer(payload)
 
-	serverKeys, err := ssh.ReadKeyExchangeReply(b)
+	serverKeys, err := kex.ReadKeyExchangeReply(b)
 	if err != nil {
 		panic(err)
 	}
 	utils.PrettyPrint(serverKeys)
+
+	Qs, err := privECDH.Curve().NewPublicKey(serverKeys.Qs)
+	if err != nil {
+		panic(err)
+	}
+
+	kexState.ServerHostKey = serverKeys.EdDSApub
+	kexState.ClientEphemeral = privECDH
+	kexState.ServerEphemeral = Qs
 
 	fmt.Println("SERVER: SSH_MSG_NEW_KEYS")
 	serverNewKeys, err := ssh.ReadNextMessage(conn, 0)
@@ -135,7 +152,7 @@ func main() {
 		panic(err)
 	}
 	b = bytes.NewBuffer(serverNewKeys.Payload)
-	if err = ssh.ReadNewKeys(b); err != nil {
+	if err = kex.ReadNewKeys(b); err != nil {
 		panic(err)
 	}
 
@@ -146,10 +163,9 @@ func main() {
 		panic(err)
 	}
 
-	Q_s, err := ecdh.Curve.NewPublicKey(Q.Curve(), serverKeys.Q_s)
+	ConnState, err := kex.DerivateConnState(&kexState)
 	if err != nil {
 		panic(err)
 	}
-
-	ssh.DerivateKeys(Q, Q_s)
+	utils.PrettyPrint(ConnState)
 }

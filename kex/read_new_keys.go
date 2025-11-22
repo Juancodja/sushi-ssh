@@ -1,16 +1,18 @@
-package ssh
+package kex
 
 import (
 	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
+
+	"github.com/Juancodja/sushi-ssh/ssh"
 )
 
 type KeyExchangeReply struct {
 	KeyType       []byte
 	EdDSApub      []byte
-	Q_s           []byte
+	Qs            []byte
 	SignatureType []byte
 	Signature     []byte
 }
@@ -29,17 +31,17 @@ func ReadKeyExchangeReply(b *bytes.Buffer) (*KeyExchangeReply, error) {
 		return nil, err
 	}
 
-	hostKeyType, err := ReadSshString(b)
+	hostKeyType, err := ssh.ReadSshString(b)
 	if err != nil {
 		return nil, err
 	}
 
-	edDSApub, err := ReadSshString(b)
+	edDSApub, err := ssh.ReadSshString(b)
 	if err != nil {
 		return nil, err
 	}
 
-	ecdhServerEphemeral, err := ReadSshString(b)
+	ecdhServerEphemeral, err := ssh.ReadSshString(b)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +51,7 @@ func ReadKeyExchangeReply(b *bytes.Buffer) (*KeyExchangeReply, error) {
 		return nil, err
 	}
 
-	signatureType, err := ReadSshString(b)
+	signatureType, err := ssh.ReadSshString(b)
 	if err != nil {
 		return nil, err
 	}

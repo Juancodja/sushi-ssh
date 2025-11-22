@@ -11,6 +11,13 @@ type SshString struct {
 	Payload []byte
 }
 
+func EncodeSshString(s []byte) *SshString {
+	l := len(s)
+	b := make([]byte, l)
+	copy(b, s)
+	return &SshString{uint32(l), b}
+}
+
 func (s *SshString) String() string {
 	return string(s.Payload)
 }
